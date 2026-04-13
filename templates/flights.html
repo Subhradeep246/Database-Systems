@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Flight Results{% endblock %}
+
+{% block content %}
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; gap: 1rem;">
+  <div>
+    <h1 style="font-size: 1.5rem;">{{ origin }} → {{ destination }}</h1>
+    <p style="color: #666; margin-top: 0.3rem; font-size: 0.9rem;">{{ date_from }} to {{ date_to }} · <strong>{{ flights|length }}</strong> flight(s)</p>
+  </div>
+  <a href="/" class="btn btn-secondary">← Back</a>
+</div>
+
+{% if flights %}
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Flight</th>
+        <th>Airline</th>
+        <th>Date</th>
+        <th>Origin</th>
+        <th>Destination</th>
+        <th>Depart</th>
+        <th>Duration</th>
+        <th>Aircraft</th>
+        <th>Available</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in flights %}
+      {% set pct = (f.booked_seats / f.capacity * 100) | int %}
+      <tr>
+        <td><strong>{{ f.flight_number }}</strong></td>
+        <td>{{ f.airline_name }}</td>
+        <td>{{ f.departure_date.strftime('%b %d') }}</td>
+        <td>
+          <span class="badge badge-green" style="display: block;">{{ f.origin_code }}</span>
+          <small style="color: #999;">{{ f.origin_city }}</small>
+        </td>
+        <td>
+          <span class="badge badge-green" style="display: block;">{{ f.dest_code }}</span>
+          <small style="color: #999;">{{ f.dest_city }}</small>
+        </td>
+        <td>{{ f.departure_time.strftime('%H:%M') }}</td>
+        <td style="font-size: 0.85rem;">{{ f.duration }}</td>
+        <td>{{ f.plane_type }}</td>
+        <td>
+          {% if f.available_seats == 0 %}
+            <span class="badge badge-red">FULL</span>
+          {% elif f.available_seats <= 3 %}
+            <span class="badge badge-yellow">{{ f.available_seats }} left</span>
+          {% else %}
+            <span class="badge badge-green">{{ f.available_seats }} seats</span>
+          {% endif %}
+        </td>
+        <td>
+          <a href="/flight/{{ f.flight_number }}/{{ f.departure_date }}" class="btn btn-primary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+<div class="card" style="text-align: center; padding: 3rem;">
+  <h2 style="color: #333; margin-bottom: 0.5rem;">No flights found</h2>
+  <p style="color: #666; margin-bottom: 1rem;">No flights between <strong>{{ origin }}</strong> and <strong>{{ destination }}</strong> for those dates.</p>
+  <a href="/" class="btn btn-primary">Try another search</a>
+</div>
+{% endif %}
+
+{% endblock %}

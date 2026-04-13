@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Find Flights{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <h2 class="card-title">Search Flights</h2>
+
+  {% if errors %}
+  <div class="alert alert-error">
+    <strong>Please fix the following:</strong>
+    <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  <form action="/flights" method="GET">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="origin">From</label>
+        <select name="origin" id="origin" required>
+          <option value="">Select origin</option>
+          {% for ap in airports %}
+          <option value="{{ ap.airport_code }}" {% if ap.airport_code == origin %}selected{% endif %}>
+            {{ ap.airport_code }} – {{ ap.city }} ({{ ap.name }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="destination">To</label>
+        <select name="destination" id="destination" required>
+          <option value="">Select destination</option>
+          {% for ap in airports %}
+          <option value="{{ ap.airport_code }}" {% if ap.airport_code == destination %}selected{% endif %}>
+            {{ ap.airport_code }} – {{ ap.city }} ({{ ap.name }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="date_from">From Date</label>
+        <input type="date" id="date_from" name="date_from" value="{{ date_from or today }}" required>
+      </div>
+      <div class="form-group">
+        <label for="date_to">To Date</label>
+        <input type="date" id="date_to" name="date_to" value="{{ date_to or today }}" required>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Search</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Airport Codes</h2>
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;">
+    {% for ap in airports %}
+    <div style="padding: 0.8rem; background: #f5f5f5; border-radius: 4px; font-size: 0.85rem;">
+      <strong>{{ ap.airport_code }}</strong><br>
+      {{ ap.city }}, {{ ap.country }}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% endblock %}

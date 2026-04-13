@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Flight {{ flight.flight_number }}{% endblock %}
+
+{% block content %}
+
+<div style="margin-bottom: 1.5rem;">
+  <a href="javascript:history.back()" style="color: #3498db; text-decoration: none;">← Back</a>
+</div>
+
+<div class="card" style="background: #2c3e50; color: #fff; margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <p style="font-size: 0.9rem; opacity: 0.8;">{{ flight.airline_name }}</p>
+      <h1 style="font-size: 1.8rem; font-weight: 700;">Flight {{ flight.flight_number }}</h1>
+      <p style="opacity: 0.7;">{{ flight.departure_date.strftime('%A, %B %d, %Y') }}</p>
+    </div>
+    {% set pct = (flight.booked_seats / flight.capacity * 100) | int %}
+    <div>
+      {% if flight.available_seats == 0 %}
+        <span class="badge badge-red" style="font-size: 1rem; padding: 0.5rem 1rem;">Fully Booked</span>
+      {% elif flight.available_seats <= 3 %}
+        <span class="badge badge-yellow" style="font-size: 1rem; padding: 0.5rem 1rem;">{{ flight.available_seats }} seats left</span>
+      {% else %}
+        <span class="badge badge-green" style="font-size: 1rem; padding: 0.5rem 1rem;">{{ flight.available_seats }} available</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card">
+    <strong style="color: #666;">From</strong>
+    <p style="font-size: 1.5rem; font-weight: 700; color: #2c3e50;">{{ flight.origin_code }}</p>
+    <small style="color: #999;">{{ flight.origin_city }}</small>
+    <p style="margin-top: 0.5rem; font-weight: 600;">{{ flight.departure_time.strftime('%H:%M') }}</p>
+  </div>
+  
+  <div class="card">
+    <strong style="color: #666;">To</strong>
+    <p style="font-size: 1.5rem; font-weight: 700; color: #2c3e50;">{{ flight.dest_code }}</p>
+    <small style="color: #999;">{{ flight.dest_city }}</small>
+  </div>
+  
+  <div class="card">
+    <strong style="color: #666;">Aircraft</strong>
+    <p style="font-size: 1.5rem; font-weight: 700; color: #2c3e50;">{{ flight.plane_type }}</p>
+    <small style="color: #999;">Capacity: {{ flight.capacity }}</small>
+  </div>
+
+  <div class="card">
+    <strong style="color: #666;">Duration</strong>
+    <p style="font-size: 1.5rem; font-weight: 700; color: #2c3e50;">{{ flight.duration }}</p>
+    <small style="color: #999;">Flight time</small>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom: 1.5rem;">
+  <h2 class="card-title">Occupancy</h2>
+  <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+    <span>{{ flight.booked_seats }} / {{ flight.capacity }} ({{ pct }}%)</span>
+  </div>
+  <div style="background: #e0e0e0; border-radius: 4px; height: 20px; overflow: hidden;">
+    <div style="height: 20px; width: {{ pct }}%; background: {% if pct >= 100 %}#e74c3c{% elif pct >= 80 %}#f39c12{% else %}#27ae60{% endif %}; transition: width 0.3s;"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Seat Map</h2>
+  <p style="font-size: 0.85rem; margin-bottom: 1rem; color: #666;">
+    <span style="display: inline-block; width: 20px; height: 20px; background: #d4edda; border: 1px solid #28a745; border-radius: 4px; vertical-align: middle; margin-right: 0.5rem;"></span> Available
+    <span style="display: inline-block; width: 20px; height: 20px; background: #f8d7da; border: 1px solid #dc3545; border-radius: 4px; vertical-align: middle; margin-left: 1rem; margin-right: 0.5rem;"></span> Booked
+  </p>
+
+  <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; max-width: 300px;">
+    {% for seat in seat_map %}
+    <div style="
+      padding: 0.8rem 0.5rem;
+      text-align: center;
+      font-weight: 600;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      border: 2px solid;
+      {% if seat.booked %}
+        background: #f8d7da;
+        border-color: #dc3545;
+        color: #721c24;
+      {% else %}
+        background: #d4edda;
+        border-color: #28a745;
+        color: #155724;
+      {% endif %}
+    ">
+      {{ seat.number }}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div style="margin-top: 1.5rem;">
+  <a href="javascript:history.back()" class="btn btn-secondary">← Back</a>
+  <a href="/" class="btn btn-primary" style="margin-left: 0.5rem;">Home</a>
+</div>
+
+{% endblock %}

@@ -1,212 +1,183 @@
-"""
-Airline Flight Search Web Application
-Flask-based frontend for querying flight information
-"""
-
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, redirect, url_for
 import psycopg2
-from datetime import datetime, timedelta
-import os
+import psycopg2.extras
+from datetime import date
 
 app = Flask(__name__)
 
-# Database configuration
-DB_CONFIG = {
-    'host': 'localhost',
-    'database': 'Airline',
-    'user': 'postgres',
-    'password': 'Subhradeep@123',  # Change this to your pgAdmin password
-    'port': 5432
-}
+# ── DB connection ──────────────────────────────────────────────────────────────
+def get_db():
+    return psycopg2.connect(
+        host="localhost",
+        port=5432,
+        dbname="Airline",   
+        user="postgres",
+        password="postgres"      
+    )
 
-def get_db_connection():
-    """Create and return a database connection"""
-    conn = psycopg2.connect(**DB_CONFIG)
-    return conn
 
-@app.route('/')
+# ── (a) Start page ─────────────────────────────────────────────────────────────
+@app.route("/", methods=["GET"])
 def index():
-    """Display the main search page"""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # Get all airport codes for the dropdown
-    cur.execute("""
-        SELECT airport_code, name, city 
-        FROM airport 
-        ORDER BY airport_code
-    """)
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    # Populate airport dropdowns from DB
+    cur.execute("SELECT airport_code, name, city, country FROM Airport ORDER BY airport_code")
     airports = cur.fetchall()
-    
+
     cur.close()
     conn.close()
-    
-    return render_template('index.html', airports=airports)
+    return render_template("index.html", airports=airports, today=date.today().isoformat())
 
-@app.route('/api/search-flights', methods=['POST'])
+
+# ── (b) Search results ─────────────────────────────────────────────────────────
+@app.route("/flights", methods=["GET"])
 def search_flights():
-    """Search for flights based on origin, destination, and date range"""
-    data = request.json
-    origin = data.get('origin', '').upper()
-    destination = data.get('destination', '').upper()
-    start_date = data.get('start_date')
-    end_date = data.get('end_date')
-    
-    # Validation
-    if not origin or not destination or not start_date or not end_date:
-        return jsonify({'error': 'All fields are required'}), 400
-    
-    if origin == destination:
-        return jsonify({'error': 'Origin and destination must be different'}), 400
-    
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Query to get flights matching the criteria
-        query = """
-            SELECT 
-                fs.flight_number,
-                f.departure_date,
-                fs.origin_code,
-                fs.dest_code,
-                fs.departure_time,
-                fs.airline_name,
-                f.plane_type,
-                ac.capacity,
-                COALESCE(COUNT(b.pid), 0) as booked_seats
-            FROM flight f
-            JOIN flightservice fs ON f.flight_number = fs.flight_number
-            JOIN aircraft ac ON f.plane_type = ac.plane_type
-            LEFT JOIN booking b ON f.flight_number = b.flight_number 
-                AND f.departure_date = b.departure_date
-            WHERE fs.origin_code = %s 
-                AND fs.dest_code = %s
-                AND f.departure_date >= %s
-                AND f.departure_date <= %s
-            GROUP BY 
-                fs.flight_number, 
-                f.departure_date, 
-                fs.origin_code, 
-                fs.dest_code, 
-                fs.departure_time,
-                fs.airline_name,
-                f.plane_type,
-                ac.capacity
-            ORDER BY f.departure_date, fs.departure_time
-        """
-        
-        cur.execute(query, (origin, destination, start_date, end_date))
-        flights = cur.fetchall()
-        
-        cur.close()
-        conn.close()
-        
-        # Format results
-        result = []
-        for flight in flights:
-            available_seats = flight[7] - flight[8]  # capacity - booked_seats
-            result.append({
-                'flight_number': flight[0],
-                'departure_date': flight[1].isoformat() if flight[1] else None,
-                'origin_code': flight[2],
-                'dest_code': flight[3],
-                'departure_time': str(flight[4]) if flight[4] else None,
-                'airline_name': flight[5],
-                'plane_type': flight[6],
-                'capacity': flight[7],
-                'booked_seats': flight[8],
-                'available_seats': available_seats
-            })
-        
-        if not result:
-            return jsonify({'flights': [], 'message': 'No flights found'}), 200
-        
-        return jsonify({'flights': result}), 200
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    origin      = request.args.get("origin", "").strip().upper()
+    destination = request.args.get("destination", "").strip().upper()
+    date_from   = request.args.get("date_from", "")
+    date_to     = request.args.get("date_to", "")
 
-@app.route('/api/flight-details/<flight_number>/<departure_date>')
-def get_flight_details(flight_number, departure_date):
-    """Get detailed information about a specific flight"""
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Get flight details
-        query = """
-            SELECT 
-                fs.flight_number,
-                f.departure_date,
-                fs.origin_code,
-                fs.dest_code,
-                fs.departure_time,
-                fs.airline_name,
-                f.plane_type,
-                ac.capacity,
-                COALESCE(COUNT(b.pid), 0) as booked_seats,
-                fs.duration
-            FROM flight f
-            JOIN flightservice fs ON f.flight_number = fs.flight_number
-            JOIN aircraft ac ON f.plane_type = ac.plane_type
-            LEFT JOIN booking b ON f.flight_number = b.flight_number 
-                AND f.departure_date = b.departure_date
-            WHERE fs.flight_number = %s AND f.departure_date = %s
-            GROUP BY 
-                fs.flight_number, 
-                f.departure_date, 
-                fs.origin_code, 
-                fs.dest_code, 
-                fs.departure_time,
-                fs.airline_name,
-                f.plane_type,
-                ac.capacity,
-                fs.duration
-        """
-        
-        cur.execute(query, (flight_number, departure_date))
-        flight = cur.fetchone()
-        
-        if not flight:
-            cur.close()
-            conn.close()
-            return jsonify({'error': 'Flight not found'}), 404
-        
-        available_seats = flight[7] - flight[8]  # capacity - booked_seats
-        
-        # Get passenger list (booked seats)
-        cur.execute("""
-            SELECT DISTINCT seat_number 
-            FROM booking 
-            WHERE flight_number = %s AND departure_date = %s
-            ORDER BY seat_number
-        """, (flight_number, departure_date))
-        
-        booked_seat_numbers = [row[0] for row in cur.fetchall()]
-        
-        cur.close()
-        conn.close()
-        
-        result = {
-            'flight_number': flight[0],
-            'departure_date': flight[1].isoformat() if flight[1] else None,
-            'origin_code': flight[2],
-            'dest_code': flight[3],
-            'departure_time': str(flight[4]) if flight[4] else None,
-            'airline_name': flight[5],
-            'plane_type': flight[6],
-            'capacity': flight[7],
-            'booked_seats': flight[8],
-            'available_seats': available_seats,
-            'duration': str(flight[9]) if flight[9] else None,
-            'booked_seat_numbers': booked_seat_numbers
-        }
-        
-        return jsonify(result), 200
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    errors = []
+    if not origin:      errors.append("Origin airport code is required.")
+    if not destination: errors.append("Destination airport code is required.")
+    if not date_from:   errors.append("Start date is required.")
+    if not date_to:     errors.append("End date is required.")
+    if date_from and date_to and date_from > date_to:
+        errors.append("Start date must be on or before the end date.")
 
-if __name__ == '__main__':
-    app.run(debug=True, host='localhost', port=5000)
+    if errors:
+        conn = get_db()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT airport_code, name, city, country FROM Airport ORDER BY airport_code")
+        airports = cur.fetchall()
+        cur.close(); conn.close()
+        return render_template("index.html", airports=airports,
+                               today=date.today().isoformat(), errors=errors,
+                               origin=origin, destination=destination,
+                               date_from=date_from, date_to=date_to)
+
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    query = """
+        SELECT
+            f.flight_number,
+            f.departure_date,
+            fs.airline_name,
+            fs.origin_code,
+            oa.name        AS origin_name,
+            oa.city        AS origin_city,
+            fs.dest_code,
+            da.name        AS dest_name,
+            da.city        AS dest_city,
+            fs.departure_time,
+            fs.duration,
+            f.plane_type,
+            ac.capacity,
+            COUNT(b.pid)   AS booked_seats,
+            ac.capacity - COUNT(b.pid) AS available_seats
+        FROM Flight f
+        JOIN FlightService fs ON f.flight_number = fs.flight_number
+        JOIN Airport       oa ON fs.origin_code  = oa.airport_code
+        JOIN Airport       da ON fs.dest_code    = da.airport_code
+        JOIN Aircraft      ac ON f.plane_type    = ac.plane_type
+        LEFT JOIN Booking  b  ON f.flight_number = b.flight_number
+                              AND f.departure_date = b.departure_date
+        WHERE fs.origin_code = %s
+          AND fs.dest_code   = %s
+          AND f.departure_date BETWEEN %s AND %s
+        GROUP BY
+            f.flight_number, f.departure_date,
+            fs.airline_name, fs.origin_code, oa.name, oa.city,
+            fs.dest_code, da.name, da.city,
+            fs.departure_time, fs.duration,
+            f.plane_type, ac.capacity
+        ORDER BY f.departure_date, fs.departure_time
+    """
+    cur.execute(query, (origin, destination, date_from, date_to))
+    flights = cur.fetchall()
+    cur.close(); conn.close()
+
+    return render_template("flights.html",
+                           flights=flights,
+                           origin=origin, destination=destination,
+                           date_from=date_from, date_to=date_to)
+
+
+# ── (c) Flight detail – seat availability ──────────────────────────────────────
+@app.route("/flight/<flight_number>/<departure_date>")
+def flight_detail(flight_number, departure_date):
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    # Core flight info + capacity / bookings
+    cur.execute("""
+        SELECT
+            f.flight_number,
+            f.departure_date,
+            fs.airline_name,
+            fs.origin_code,
+            oa.name        AS origin_name,
+            oa.city        AS origin_city,
+            fs.dest_code,
+            da.name        AS dest_name,
+            da.city        AS dest_city,
+            fs.departure_time,
+            fs.duration,
+            f.plane_type,
+            ac.capacity,
+            COUNT(b.pid)                   AS booked_seats,
+            ac.capacity - COUNT(b.pid)     AS available_seats
+        FROM Flight f
+        JOIN FlightService fs ON f.flight_number = fs.flight_number
+        JOIN Airport       oa ON fs.origin_code  = oa.airport_code
+        JOIN Airport       da ON fs.dest_code    = da.airport_code
+        JOIN Aircraft      ac ON f.plane_type    = ac.plane_type
+        LEFT JOIN Booking  b  ON f.flight_number = b.flight_number
+                              AND f.departure_date = b.departure_date
+        WHERE f.flight_number  = %s
+          AND f.departure_date = %s::DATE
+        GROUP BY
+            f.flight_number, f.departure_date,
+            fs.airline_name, fs.origin_code, oa.name, oa.city,
+            fs.dest_code, da.name, da.city,
+            fs.departure_time, fs.duration,
+            f.plane_type, ac.capacity
+    """, (flight_number, departure_date))
+    flight = cur.fetchone()
+
+    # Seat map – which seats are taken
+    cur.execute("""
+        SELECT seat_number
+        FROM Booking
+        WHERE flight_number = %s AND departure_date = %s::DATE
+        ORDER BY seat_number
+    """, (flight_number, departure_date))
+    booked_seats = {row["seat_number"] for row in cur.fetchall()}
+
+    cur.close(); conn.close()
+
+    if not flight:
+        return render_template("error.html", message="Flight not found."), 404
+
+    seat_map = []
+    for seat in range(1, flight["capacity"] + 1):
+        seat_map.append({"number": seat, "booked": seat in booked_seats})
+
+    return render_template("flight_detail.html", flight=flight, seat_map=seat_map)
+
+
+# ── Error handlers ─────────────────────────────────────────────────────────────
+@app.errorhandler(404)
+def not_found(e):
+    return render_template("error.html", message="Page not found."), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template("error.html", message=f"Database error: {e}"), 500
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
